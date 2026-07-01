@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Conversor VCF a HTML y CSV</title>
+</head>
+<body>
+    <h2>Conversor VCF Local (Privado)</h2>
+    
+    <label>1. Selecciona tu archivo .vcf de iOS:</label><br><br>
+    <input type="file" id="vcfFile" accept=".vcf"><br><br>
+    
+    <label>2. Configuración del CSV:</label>
+    <select id="separador">
+        <option value=";">Punto y coma (;)</option>
+        <option value=",">Coma (,)</option>
+    </select><br><br>
+
+    <button onclick="procesarVCF()">Convertir Datos</button>
+    <button id="btnDescargarCSV" sorted disabled>Descargar CSV</button>
+    <button id="btnDescargarHTML" sorted disabled>Descargar Tabla HTML</button>
+    
+    <br><br>
+    <hr>
+    <h3>Vista Previa de la Tabla:</h3>
+    <div id="resultado"></div>
+
+    <script>
+        let csvGlobal = "";
+        let htmlGlobal = "";
+
+        function procesarVCF() {
+            const fileInput = document.getElementById('vcfFile');
+            const sep = document.getElementById('separador').value;
+            
+            if (fileInput.files.length === 0) {
+                alert('Por favor, selecciona un archivo VCF primero.');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const texto = e.target.result;
+                // Dividimos el archivo por bloques de contacto
+                const bloques = texto.split('BEGIN:VCARD');
+                
+                let filasHtml = '';
+                let filasCsv = `Nombre${sep}Apellidos${sep}Teléfono 1${sep}Teléfono 2${sep}Teléfono 3${sep}Email\n`;
+                
+                bloques.forEach(bloque => {
+                    if (!bloque.trim()) return;
+                    
+                    let nombreStr = '';
+                    let apellidoStr = '';
+                    let telefonos = [];
+                    let email = '';
+                    
+                    const lineas = bloque.split('\n');
+                    lineas.forEach(linea => {
+                        linea = linea.trim();
+                        
+                        // Parsear campo N (Apellidos;Nombre)
+                        if (linea.startsWith('N:')) {
+                            let datosN = linea.replace('N:', '').split(';');
+                            apellidoStr = datosN[0] ? datosN[0].trim() : '';
+                            nombreStr = datosN[1] ? datosN[1].trim() : '';
+                        }
+                        // Alternativa si N está vacío pero FN tiene datos
+                        if (!nombreStr && !apellidoStr && linea.startsWith('FN:')) {
+                            nombreStr = linea.replace('FN:', '').trim();
+                        }
+                        // Capturar Teléfonos (soporta múltiples)
+                        if (linea.startsWith('TEL') && linea.includes(':')) {
+                            let tel = linea.substring(linea.indexOf(':') + 1).trim();
+                            if (tel) telefonos.push(tel);
+                        }
+                        // Capturar Email
+                        if (linea.startsWith('EMAIL') && linea.includes(':')) {
+                            email = linea.substring(linea.indexOf(':') + 1).trim();
+                        }
+                    });
+                    
+                    // Extraer hasta 3 teléfonos de forma limpia
+                    let t1 = telefonos[0] || '';
+                    let t2 = telefonos[1] || '';
+                    let t3 = telefonos[2] || '';
+                    
+                    if (nombreStr || apellidoStr || t1 || email) {
+                        // Generar fila HTML limpia
+                        filasHtml += `  <tr>\n    <td>${nombreStr}</td>\n    <td>${apellidoStr}</td>\n    <td>${t1}</td>\n    <td>${t2}</td>\n    <td>${t3}</td>\n    <td>${email}</td>\n  </tr>\n`;
+                        
+                        // Generar fila CSV escapando comillas por seguridad
+                        filasCsv += `"${nombreStr}"${sep}"${apellidoStr}"${sep}"${t1}"${sep}"${t2}"${sep}"${t3}"${sep}"${email}"\n`;
+                    }
+                });
+                
+                // Construcción de los contenedores globales finales
+                htmlGlobal = `<table>\n<thead>\n  <tr>\n    <th>Nombre</th>\n    <th>Apellidos</th>\n    <th>Teléfono 1</th>\n    <th>Teléfono 2</th>\n    <th>Teléfono 3</th>\n    <th>Email</th>\n  </tr>\n</thead>\n<tbody>\n${filasHtml}</tbody>\n</table>`;
+                csvGlobal = filasCsv;
+                
+                // Mostrar vista previa en la pantalla
+                document.getElementById('resultado').innerHTML = htmlGlobal;
+                
+                // Activar botones de descarga
+                configurarBotonDescarga('btnDescargarCSV', csvGlobal, 'contactos.csv', 'text/csv');
+                configurarBotonDescarga('btnDescargarHTML', htmlGlobal, 'tabla_contactos.html', 'text/html');
+            };
+            
+            reader.readAsText(fileInput.files[0]);
+        }
+
+        function configurarBotonDescarga(idBoton, contenido, nombreArchivo, tipoMime) {
+            const boton = document.getElementById(idBoton);
+            boton.disabled = false;
+            boton.onclick = function() {
+                const blob = new Blob([contenido], { type: tipoMime + ';charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute("download", nombreArchivo);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+        }
+    </script>
+</body>
+</html>
